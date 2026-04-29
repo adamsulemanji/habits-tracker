@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Habit, HabitAnalysis, CATEGORIES } from '@/interfaces/Habit';
+import { Habit, HabitAnalysis, CATEGORIES, formatSchedule } from '@/interfaces/Habit';
 import { Button } from '@/components/ui/button';
 import { Check, Pencil, Plus, Flame } from 'lucide-react';
 
@@ -45,7 +45,7 @@ export default function HabitRow({ habit, analysis, loggedToday, onLog, onEdit }
         <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
           {category && <span>{category.label}</span>}
           <span className="opacity-40">·</span>
-          <span className="capitalize">{habit.frequency}</span>
+          <span>{formatSchedule(habit)}</span>
           {streak > 0 && (
             <>
               <span className="opacity-40">·</span>

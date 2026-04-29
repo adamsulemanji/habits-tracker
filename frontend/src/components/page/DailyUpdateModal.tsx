@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Habit, HabitLog } from '@/interfaces/Habit';
+import { Habit, HabitLog, isScheduledToday } from '@/interfaces/Habit';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -42,7 +42,7 @@ export default function DailyUpdateModal({
       const loggedIDs = new Set(todayLogs.map(l => l.habitID));
       setEntries(
         habits
-          .filter(h => h.isActive)
+          .filter(h => h.isActive && isScheduledToday(h))
           .map(habit => ({
             habit,
             checked: loggedIDs.has(habit.habitID),
@@ -116,7 +116,7 @@ export default function DailyUpdateModal({
 
         <div className="flex-1 overflow-y-auto -mx-6 px-6 space-y-1 py-1">
           {entries.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">No active habits. Create some first.</p>
+            <p className="text-sm text-muted-foreground py-4 text-center">No habits scheduled for today.</p>
           ) : (
             entries.map(entry => (
               <div key={entry.habit.habitID} className="rounded-lg border bg-card">

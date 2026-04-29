@@ -1,0 +1,15 @@
+diff --git a/node_modules/next/dist/build/index.js b/node_modules/next/dist/build/index.js
+index 94330e0..5ab1110 100644
+--- a/node_modules/next/dist/build/index.js
++++ b/node_modules/next/dist/build/index.js
+@@ -190,7 +190,9 @@ async function writeClientSsgManifest(prerenderManifest, { buildId, distDir, loc
+         ...Object.keys(prerenderManifest.dynamicRoutes)
+     ].sort());
+     const clientSsgManifestContent = `self.__SSG_MANIFEST=${(0, _devalue.default)(ssgPages)};self.__SSG_MANIFEST_CB&&self.__SSG_MANIFEST_CB()`;
+-    await writeFileUtf8(_path.default.join(distDir, _constants1.CLIENT_STATIC_FILES_PATH, buildId, '_ssgManifest.js'), clientSsgManifestContent);
++    const ssgManifestPath = _path.default.join(distDir, _constants1.CLIENT_STATIC_FILES_PATH, buildId, '_ssgManifest.js');
++    await _fs.promises.mkdir(_path.default.dirname(ssgManifestPath), { recursive: true });
++    await writeFileUtf8(ssgManifestPath, clientSsgManifestContent);
+ }
+ async function writeFunctionsConfigManifest(distDir, manifest) {
+     await writeManifest(_path.default.join(distDir, _constants1.SERVER_DIRECTORY, _constants1.FUNCTIONS_CONFIG_MANIFEST), manifest);

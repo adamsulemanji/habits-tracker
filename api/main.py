@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict, Any
 
 import boto3
@@ -33,15 +33,25 @@ logs_table = dynamodb.Table(os.environ.get("LOGS_TABLE_NAME", "HabitLogsTable"))
 
 # ─── Models ────────────────────────────────────────────────────────────────────
 
+class Schedule(BaseModel):
+    # 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
+    daysOfWeek: List[int] = list(range(7))
+    # repeat every N weeks (1=every week, 2=every other week, etc.)
+    weekInterval: int = 1
+    # optional hard stop date (ISO YYYY-MM-DD)
+    endDate: Optional[str] = None
+
+
 class HabitInfo(BaseModel):
     habitID: Optional[str] = None
     name: str
     description: str = ""
     category: str = "other"
-    frequency: str = "daily"
+    frequency: str = "daily"          # kept for backward compat
+    schedule: Optional[Schedule] = None
     targetCount: int = 1
     color: str = "#3b82f6"
-    icon: str = "⭐"
+    icon: str = ""
     createdAt: Optional[str] = None
     isActive: bool = True
 
@@ -52,6 +62,66 @@ class HabitLogInfo(BaseModel):
     date: str
     completedAt: Optional[str] = None
     note: str = ""
+
+
+# ─── Schedule helpers ──────────────────────────────────────────────────────────
+
+def _get_scheduled_days_in_range(schedule: Optional[Dict], frequency: str,
+                                  start: date, end: date) -> int:
+    """Count how many days in [start, end] the habit is scheduled."""
+    if schedule is None:
+        # Legacy: daily = every day, weekly = one day per week
+        days = (end - start).days + 1
+        return days if frequency == "daily" else max(1, days // 7)
+
+    days_of_week = schedule.get("daysOfWeek", list(range(7)))
+    week_interval = max(1, schedule.get("weekInterval", 1))
+    habit_end = schedule.get("endDate")
+
+    if not days_of_week:
+        return 1  # avoid divide-by-zero
+
+    count = 0
+    cur = start
+    # Use the ISO week of the start of our range as the reference point
+    # so week_interval is consistent relative to when we're measuring.
+    ref_week = start.isocalendar()[1]
+
+    while cur <= end:
+        if habit_end and cur.isoformat() > habit_end:
+            break
+        iso_week = cur.isocalendar()[1]
+        # distance in weeks from reference
+        week_diff = (iso_week - ref_week) % 53  # handles year wrap roughly
+        if week_diff % week_interval == 0:
+            # cur.weekday(): 0=Mon … 6=Sun — matches our convention
+            if cur.weekday() in days_of_week:
+                count += 1
+        cur += timedelta(days=1)
+
+    return max(count, 1)
+
+
+def _is_scheduled_on(schedule: Optional[Dict], frequency: str, d: date) -> bool:
+    """Return True if the habit is scheduled on the given date."""
+    if schedule is None:
+        return frequency == "daily"  # weekly habits can be logged any day
+
+    days_of_week = schedule.get("daysOfWeek", list(range(7)))
+    week_interval = max(1, schedule.get("weekInterval", 1))
+    habit_end = schedule.get("endDate")
+
+    if habit_end and d.isoformat() > habit_end:
+        return False
+    if d.weekday() not in days_of_week:
+        return False
+    if week_interval > 1:
+        # Check whether this ISO week is a "scheduled" week.
+        # We treat ISO week 1 as the reference point.
+        iso_week = d.isocalendar()[1]
+        if iso_week % week_interval != 0:
+            return False
+    return True
 
 
 # ─── Health ────────────────────────────────────────────────────────────────────
@@ -67,6 +137,19 @@ def health():
 def list_habits():
     response = habits_table.scan()
     return {"success": True, "items": response.get("Items", [])}
+
+
+@app.get("/habits/scheduled/today", response_model=Dict[str, Any])
+def habits_scheduled_today():
+    """Return habits that are scheduled for today (useful for daily check-in)."""
+    today = date.today()
+    response = habits_table.scan()
+    habits = response.get("Items", [])
+    scheduled = [
+        h for h in habits
+        if h.get("isActive") and _is_scheduled_on(h.get("schedule"), h.get("frequency", "daily"), today)
+    ]
+    return {"success": True, "items": scheduled}
 
 
 @app.get("/habits/{habitID}", response_model=Dict[str, Any])
@@ -98,7 +181,8 @@ def update_habit(habitID: str, habit: HabitInfo):
         Key={"habitID": habitID},
         UpdateExpression=(
             "SET #n = :name, description = :description, category = :category, "
-            "frequency = :frequency, targetCount = :targetCount, color = :color, "
+            "frequency = :frequency, schedule = :schedule, "
+            "targetCount = :targetCount, color = :color, "
             "icon = :icon, isActive = :isActive"
         ),
         ExpressionAttributeNames={"#n": "name"},
@@ -107,6 +191,7 @@ def update_habit(habitID: str, habit: HabitInfo):
             ":description": habit.description,
             ":category": habit.category,
             ":frequency": habit.frequency,
+            ":schedule": habit.schedule.dict() if habit.schedule else None,
             ":targetCount": habit.targetCount,
             ":color": habit.color,
             ":icon": habit.icon,
@@ -125,7 +210,6 @@ def delete_habit(habitID: str):
     if "Item" not in response:
         raise HTTPException(status_code=404, detail="Habit not found")
     habits_table.delete_item(Key={"habitID": habitID})
-    # Also delete all logs for this habit
     logs_response = logs_table.query(
         IndexName="habitID-date-index",
         KeyConditionExpression=boto3.dynamodb.conditions.Key("habitID").eq(habitID),
@@ -197,50 +281,66 @@ def delete_log(logID: str):
 # ─── Analysis ──────────────────────────────────────────────────────────────────
 
 def _compute_habit_analysis(habit: Dict[str, Any], logs: List[Dict[str, Any]]) -> Dict[str, Any]:
-    today = date.today().isoformat()
+    today = date.today()
+    today_str = today.isoformat()
+    yesterday_str = (today - timedelta(days=1)).isoformat()
     log_dates = sorted({log["date"] for log in logs})
 
-    # Streak calculation
+    schedule = habit.get("schedule")
+    frequency = habit.get("frequency", "daily")
+
+    # ── Streak: counts consecutive SCHEDULED days completed ──
+    # Build the sequence of scheduled days up to today (most recent first)
+    # and walk backward checking completion.
     current_streak = 0
+    streak_broken = False
+    check = today
+    # Look back up to 2 years
+    for _ in range(730):
+        if check < date(2000, 1, 1):
+            break
+        if _is_scheduled_on(schedule, frequency, check):
+            if check.isoformat() in log_dates:
+                current_streak += 1
+            else:
+                # Allow a single-day grace (today might not be logged yet)
+                if check.isoformat() == today_str and current_streak == 0:
+                    # skip today if not yet logged — don't break streak
+                    check -= timedelta(days=1)
+                    continue
+                streak_broken = True
+                break
+        check -= timedelta(days=1)
+
+    # Max streak over all time (consecutive scheduled-day completions)
     max_streak = 0
-    temp = 0
-    prev_date = None
-    for d in reversed(log_dates):
-        if prev_date is None:
-            if d == today or d == date.fromordinal(date.today().toordinal() - 1).isoformat():
-                current_streak = 1
-                temp = 1
-            else:
-                break
-        else:
-            prev = date.fromisoformat(prev_date)
-            curr = date.fromisoformat(d)
-            if (prev - curr).days == 1:
-                temp += 1
-                if current_streak > 0:
-                    current_streak = temp
-            else:
-                break
-        prev_date = d
+    run = 0
+    log_set = set(log_dates)
+    if schedule or frequency == "daily":
+        # Walk forward through all scheduled days from first log date
+        if log_dates:
+            scan_start = date.fromisoformat(log_dates[0])
+            scan_end = today
+            cur = scan_start
+            while cur <= scan_end:
+                if _is_scheduled_on(schedule, frequency, cur):
+                    if cur.isoformat() in log_set:
+                        run += 1
+                        max_streak = max(max_streak, run)
+                    else:
+                        if cur.isoformat() != today_str:  # grace for today
+                            run = 0
+                cur += timedelta(days=1)
+    else:
+        max_streak = len(log_dates)  # weekly: any completion counts
 
-    for i in range(len(log_dates)):
-        if i == 0:
-            temp = 1
-        else:
-            prev = date.fromisoformat(log_dates[i - 1])
-            curr = date.fromisoformat(log_dates[i])
-            if (curr - prev).days == 1:
-                temp += 1
-            else:
-                temp = 1
-        max_streak = max(max_streak, temp)
+    # ── Completion rate: last 30 scheduled days ──
+    thirty_ago = today - timedelta(days=30)
+    scheduled_count = _get_scheduled_days_in_range(schedule, frequency, thirty_ago, today)
+    recent_completed = len({l["date"] for l in logs if l["date"] >= thirty_ago.isoformat()})
+    completion_rate_30d = round(min(recent_completed / scheduled_count, 1.0) * 100, 1)
 
-    # Completion rate over last 30 days
-    thirty_days_ago = date.fromordinal(date.today().toordinal() - 30).isoformat()
-    recent_logs = [l for l in logs if l["date"] >= thirty_days_ago]
-    completion_rate_30d = round(len(set(l["date"] for l in recent_logs)) / 30 * 100, 1)
-
-    # Weekly counts (last 8 weeks)
+    # ── Weekly activity counts ──
     weekly: Dict[str, int] = {}
     for log in logs:
         d = date.fromisoformat(log["date"])
@@ -255,6 +355,7 @@ def _compute_habit_analysis(habit: Dict[str, Any], logs: List[Dict[str, Any]]) -
         "currentStreak": current_streak,
         "maxStreak": max_streak,
         "completionRate30d": completion_rate_30d,
+        "scheduledDays30": scheduled_count,
         "weeklyActivity": weekly,
         "logDates": log_dates,
     }
@@ -266,12 +367,10 @@ def get_analysis():
     habits = habits_resp.get("Items", [])
     logs_resp = logs_table.scan()
     all_logs = logs_resp.get("Items", [])
-
     results = []
     for habit in habits:
         habit_logs = [l for l in all_logs if l["habitID"] == habit["habitID"]]
         results.append(_compute_habit_analysis(habit, habit_logs))
-
     return {"success": True, "items": results}
 
 
@@ -281,11 +380,9 @@ def get_habit_analysis(habitID: str):
     habit = habit_resp.get("Item")
     if not habit:
         raise HTTPException(status_code=404, detail="Habit not found")
-
     logs_resp = logs_table.query(
         IndexName="habitID-date-index",
         KeyConditionExpression=boto3.dynamodb.conditions.Key("habitID").eq(habitID),
     )
     logs = logs_resp.get("Items", [])
     return {"success": True, "item": _compute_habit_analysis(habit, logs)}
-# Lambda rebuild trigger
