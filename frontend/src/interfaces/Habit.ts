@@ -32,13 +32,13 @@ export interface HabitAnalysis {
 }
 
 export const CATEGORIES = [
-  { value: 'health', label: 'Health', icon: '🏥' },
-  { value: 'fitness', label: 'Fitness', icon: '💪' },
-  { value: 'learning', label: 'Learning', icon: '📚' },
-  { value: 'productivity', label: 'Productivity', icon: '⚡' },
-  { value: 'mindfulness', label: 'Mindfulness', icon: '🧘' },
-  { value: 'social', label: 'Social', icon: '👥' },
-  { value: 'other', label: 'Other', icon: '⭐' },
+  { value: 'health', label: 'Health' },
+  { value: 'fitness', label: 'Fitness' },
+  { value: 'learning', label: 'Learning' },
+  { value: 'productivity', label: 'Productivity' },
+  { value: 'mindfulness', label: 'Mindfulness' },
+  { value: 'social', label: 'Social' },
+  { value: 'other', label: 'Other' },
 ];
 
 export const FREQUENCIES = [

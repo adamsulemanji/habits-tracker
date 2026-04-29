@@ -10,7 +10,8 @@ import HabitFormModal from '@/components/page/HabitFormModal';
 import LogModal from '@/components/page/LogModal';
 import AnalysisCharts from '@/components/page/AnalysisCharts';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, BarChart2, ListChecks } from 'lucide-react';
+import DailyUpdateModal from '@/components/page/DailyUpdateModal';
+import { Loader2, Plus, BarChart2, LayoutGrid, ClipboardList } from 'lucide-react';
 
 type Tab = 'habits' | 'analysis';
 
@@ -24,6 +25,7 @@ export default function Home() {
   const [editingHabit, setEditingHabit] = useState<Habit | undefined>(undefined);
   const [logHabit, setLogHabit] = useState<Habit | undefined>(undefined);
   const [logOpen, setLogOpen] = useState(false);
+  const [dailyOpen, setDailyOpen] = useState(false);
   const { toast } = useToast();
   const apiURL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -56,6 +58,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchAll();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSaveHabit = (saved: Habit) => {
@@ -72,9 +75,7 @@ export default function Home() {
     setAnalyses(prev => prev.filter(a => a.habitID !== habitID));
   };
 
-  const handleLogged = () => {
-    fetchAll();
-  };
+  const handleLogged = () => fetchAll();
 
   const handleOpenLog = (habit: Habit) => {
     setLogHabit(habit);
@@ -97,67 +98,96 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur-sm">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 gap-4">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">🎯</span>
-              <div>
-                <h1 className="text-lg font-bold leading-none">Habits Tracker</h1>
-                {!isLoading && totalActive > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {completedToday}/{totalActive} done today
-                  </p>
-                )}
-              </div>
+      <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-between h-14 gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="font-semibold text-base tracking-tight">Habits</span>
+              {!isLoading && totalActive > 0 && (
+                <span className="hidden sm:block text-xs text-muted-foreground">
+                  {completedToday} / {totalActive} today
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-2">
+
+            <nav className="flex items-center gap-1">
               <Button
-                variant={tab === 'habits' ? 'default' : 'ghost'}
+                variant={tab === 'habits' ? 'secondary' : 'ghost'}
                 size="sm"
-                className="gap-1.5"
+                className="h-8 gap-1.5 text-xs"
                 onClick={() => setTab('habits')}
               >
-                <ListChecks className="h-4 w-4" />
+                <LayoutGrid className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Habits</span>
               </Button>
               <Button
-                variant={tab === 'analysis' ? 'default' : 'ghost'}
+                variant={tab === 'analysis' ? 'secondary' : 'ghost'}
                 size="sm"
-                className="gap-1.5"
+                className="h-8 gap-1.5 text-xs"
                 onClick={() => setTab('analysis')}
               >
-                <BarChart2 className="h-4 w-4" />
+                <BarChart2 className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Analysis</span>
               </Button>
-              <Button size="sm" className="gap-1.5" onClick={handleAddNew}>
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">Add Habit</span>
+              <div className="w-px h-4 bg-border mx-1" />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs"
+                onClick={() => setDailyOpen(true)}
+              >
+                <ClipboardList className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Check In</span>
+              </Button>
+              <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={handleAddNew}>
+                <Plus className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">New</span>
               </Button>
               <ModeToggle />
-            </div>
+            </nav>
           </div>
         </div>
+
+        {/* Mobile progress bar */}
+        {!isLoading && totalActive > 0 && (
+          <div className="sm:hidden px-4 pb-2">
+            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+              <span>{completedToday} of {totalActive} completed today</span>
+              <span>{Math.round(completedToday / totalActive * 100)}%</span>
+            </div>
+            <div className="h-1 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-500"
+                style={{ width: `${(completedToday / totalActive) * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Main */}
-      <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 py-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-24 gap-2 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-sm">Loading…</span>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">Loading</span>
           </div>
         ) : tab === 'habits' ? (
           activeHabits.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 gap-4">
-              <span className="text-5xl">🌱</span>
-              <p className="text-muted-foreground text-sm">No habits yet. Add your first one!</p>
-              <Button onClick={handleAddNew} className="gap-1.5">
-                <Plus className="h-4 w-4" /> Add Habit
+            <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                <LayoutGrid className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">No habits yet</p>
+                <p className="text-muted-foreground text-sm mt-0.5">Create your first habit to start tracking.</p>
+              </div>
+              <Button onClick={handleAddNew} size="sm" className="gap-1.5">
+                <Plus className="h-4 w-4" /> New Habit
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {activeHabits.map(habit => (
                 <HabitCard
                   key={habit.habitID}
@@ -176,11 +206,10 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t py-4 text-center text-xs text-muted-foreground">
-        Habits Tracker — built with Next.js + FastAPI + AWS
+      <footer className="border-t py-3 text-center text-xs text-muted-foreground">
+        Habits Tracker
       </footer>
 
-      {/* Modals */}
       <HabitFormModal
         habit={editingHabit}
         isOpen={formOpen}
@@ -197,6 +226,14 @@ export default function Home() {
           onLogged={handleLogged}
         />
       )}
+
+      <DailyUpdateModal
+        habits={activeHabits}
+        todayLogs={todayLogs}
+        isOpen={dailyOpen}
+        onOpenChange={setDailyOpen}
+        onSaved={handleLogged}
+      />
     </div>
   );
 }

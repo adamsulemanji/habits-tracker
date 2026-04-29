@@ -288,3 +288,4 @@ def get_habit_analysis(habitID: str):
     )
     logs = logs_resp.get("Items", [])
     return {"success": True, "item": _compute_habit_analysis(habit, logs)}
+# Lambda rebuild trigger

@@ -31,7 +31,7 @@ export default function LogModal({ habit, isOpen, onOpenChange, onLogged }: LogM
         date: today,
         note,
       });
-      toast({ title: 'Logged!', description: `${habit.icon} "${habit.name}" marked complete for today.` });
+      toast({ title: 'Logged', description: `"${habit.name}" marked complete for today.` });
       onLogged();
       onOpenChange(false);
       setNote('');
@@ -46,7 +46,7 @@ export default function LogModal({ habit, isOpen, onOpenChange, onLogged }: LogM
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>{habit.icon} Log — {habit.name}</DialogTitle>
+          <DialogTitle>Log — {habit.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <Label htmlFor="log-note">Note (optional)</Label>

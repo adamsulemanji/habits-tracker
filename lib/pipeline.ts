@@ -52,7 +52,6 @@ export class HabitsTrackerPipeline extends cdk.Stack {
           },
           build: {
             commands: [
-              'pip3 install -r api/requirements.txt -t /tmp/api_bundle --quiet && cp -r api/. /tmp/api_bundle/ || true',
               'cdk synth -o dist',
               'npx cdk-assets publish --path dist/HabitsTrackerStack.assets.json',
             ],
@@ -120,10 +119,14 @@ export class HabitsTrackerPipeline extends cdk.Stack {
         phases: {
           install: {
             runtimeVersions: { nodejs: '20' },
-            commands: ['cd frontend', 'npm install --legacy-peer-deps'],
+            commands: [
+              'cd frontend',
+              'npm install --legacy-peer-deps',
+            ],
           },
           build: {
             commands: [
+              'cd frontend',
               'export NEXT_PUBLIC_API_URL=https://api.habits.adamsulemanji.com',
               'npm run build',
             ],

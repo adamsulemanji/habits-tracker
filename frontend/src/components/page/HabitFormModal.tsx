@@ -127,7 +127,7 @@ export default function HabitFormModal({ habit, isOpen, onOpenChange, onSave, on
                 <SelectContent>
                   {CATEGORIES.map(c => (
                     <SelectItem key={c.value} value={c.value}>
-                      {c.icon} {c.label}
+                      {c.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -162,17 +162,6 @@ export default function HabitFormModal({ habit, isOpen, onOpenChange, onSave, on
                 />
               ))}
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="icon">Icon (emoji)</Label>
-            <Input
-              id="icon"
-              value={form.icon}
-              onChange={e => setForm(f => ({ ...f, icon: e.target.value }))}
-              maxLength={4}
-              className="w-20"
-            />
           </div>
 
           <DialogFooter className="gap-2">
